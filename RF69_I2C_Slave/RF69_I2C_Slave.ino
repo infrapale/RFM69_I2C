@@ -22,8 +22,7 @@
 
 #define KEY_BUF_LEN     8
 #define RFM_I2C_ADDR    0x20
-#define NBR_RX_BUFFERS  4
-#define NBR_TX_BUFFERS  4
+#define NBR_BUFFERS  4
 
 #define FREQUENCY     RF69_434MHZ
 #define RFM69_CS      8
@@ -32,19 +31,25 @@
 #define RFM69_FREQ    434.0 
 #define RFM69_TX_IVAL_100ms  20;
 
+#define RFM69_RESET    0x01
+#define RFM69_CLR_RX   0x02
+#define RFM69_CLR_TX   0x03
+#define RFM69_SEND_MSG 0x10
+#define RFM69_RX_AVAIL 0x40
 
-uint8_t rx_buf[NBR_RX_BUFFERS][RH_RF69_MAX_MESSAGE_LEN];
-uint8_t tx_buf[NBR_TX_BUFFERS][RH_RF69_MAX_MESSAGE_LEN];
+struct ring_control_struct {
+    uint8_t head;
+    uint8_t tail;
+    boolean full;
+    uint8_t buf[NBR_BUFFERS][RH_RF69_MAX_MESSAGE_LEN];
+};
 
-const uint8_t ROW_PIN[NBR_ROWS] = {ROW0_PIN, ROW1_PIN, ROW2_PIN, ROW3_PIN, ROW4_PIN };  
-const uint8_t COL_PIN[NBR_COLS] = {COL0_PIN, COL1_PIN, COL2_PIN, COL3_PIN, COL4_PIN };
+ring_control_struct rx_data;
+ring_control_struct tx_data;
 
 enum key_states {
   KEY_STATE_IDLE,
   KEY_STATE_PRESSED,
-  KEY_STATE_PRESSED_DEBOUNCED,
-  KEY_STATE_RELEASED,
-  KEY_STATE_READY
 };
 
 TaHa scan_keypad_handle;
@@ -53,6 +58,10 @@ TaHa print_key_handle;
 boolean Debug = true;
 static uint8_t reg_addr;
 static uint8_t i2c_event_buf[I2C_EVENT_BUFF_LEN];
+
+void initialize_buf(ring_control_struct * buf){
+    memset(buf ,0x00, sizeof(buf));
+}
 
 /**
  * @brief  Scan Keypad,run every 10ms by scheduler  
@@ -75,31 +84,7 @@ void setup() {
     radio_init(RFM69_CS,RFM69_INT,RFM69_RST, RFM69_FREQ);
     radio_send_msg("Telmac Wall Terminal 14-segment");
 
-    for (row = 0; row < NBR_ROWS; row++) {
-        pinMode(ROW_PIN[row], OUTPUT);
-    }
-    for (col = 0; col < NBR_COLS; col++) {
-        pinMode(COL_PIN[col], INPUT);    
-    }
-    key_char = '0';
-    for (row = 0; row < NBR_ROWS; row++) {      
-        for (col = 0; col < NBR_COLS; col++) {
-            key_matrix[row][col] = key_char;
-            key_char++;
-            if (key_char == ':') key_char = 'A';
-        }
-    }  
-
-    for (key_wr_indx = 0;key_wr_indx <  KEY_BUF_LEN; key_wr_indx++){
-        key_buf[key_wr_indx] = 0x00;
-    }
-    key_wr_indx = 0;
-    key_rd_indx = 0;
-
-    key_vector = &key_matrix[0][0];
-    scan_keypad_handle.set_interval(10,RUN_RECURRING, ScanKeypad);
-    print_key_handle.set_interval(50,RUN_RECURRING, PrintKey);
-
+ 
 }
 
 void loop() {
@@ -133,12 +118,20 @@ void ReceiveEvent(int howMany)
         }
     }
     switch (i2c_event_buf[0]) {
-    case RKP_EVENT_SET_KEY_VECTOR:
-        if (idx > NBR_KEYS) idx = NBR_KEYS;
-        memcpy(key_matrix, &i2c_event_buf[1],idx);
+    case RFM69_RESET:
+        break;
+    case RFM69_CLR_RX:
+        break;
+    case RFM69_CLR_TX:
+        break;
+    case RFM69_SEND_MSG:
         break;
     }
 }
+
+#define RFM69_SEND_MSG 0x10
+#define RFM69_RX_AVAIL 0x40
+
 
 /**
  * @brief  I2C Request Event
@@ -156,7 +149,7 @@ void RequestEvent()
        Serial.print(" "); Serial.println(key_func_buf[key_rd_indx]);
        cmd = Wire.read();  
        switch (cmd){
-       case RKP_REQ_GET_KEY:
+       case RFM69_RX_AVAIL:
            buf[0] = key_buf[key_rd_indx];
            buf[1] = i2c_event_buf[0];
            break;
@@ -175,4 +168,3 @@ void RequestEvent()
         Wire.write(buf,2); 
     } 
 }
-  
