@@ -17,12 +17,14 @@
 
 
 #include <Wire.h>
+#include "main.h"
 #include <rfm69_support.h>
 #include <TaHa.h>
 
 #define KEY_BUF_LEN     8
 #define RFM_I2C_ADDR    0x20
-#define NBR_BUFFERS  4
+#define NBR_BUFFERS     4
+#define BUF_LEN         
 
 #define FREQUENCY     RF69_434MHZ
 #define RFM69_CS      8
@@ -36,6 +38,8 @@
 #define RFM69_CLR_TX   0x03
 #define RFM69_SEND_MSG 0x10
 #define RFM69_RX_AVAIL 0x40
+
+#define I2C_EVENT_BUFF_LEN RFM69_BUF_LEN
 
 struct ring_control_struct {
     uint8_t head;
@@ -82,7 +86,7 @@ void setup() {
     Wire.onReceive(ReceiveEvent);  // register event    
 
     radio_init(RFM69_CS,RFM69_INT,RFM69_RST, RFM69_FREQ);
-    radio_send_msg("Telmac Wall Terminal 14-segment");
+    radio_send_msg("RFM69 I2C Slave");
 
  
 }
