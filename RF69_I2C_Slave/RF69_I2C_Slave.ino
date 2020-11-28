@@ -19,6 +19,7 @@
 #include <Wire.h>
 #include "main.h"
 #include <rfm69_support.h>
+#include "ArrayRingBuf.h"
 #include <TaHa.h>
 
 #define KEY_BUF_LEN     8
@@ -26,10 +27,10 @@
 #define NBR_BUFFERS     4
 #define BUF_LEN         
 
-#define FREQUENCY     RF69_434MHZ
-#define RFM69_CS      8
-#define RFM69_INT     3
-#define RFM69_RST     4
+//#define FREQUENCY     RF69_434MHZ
+#define RFM69_CS      10
+#define RFM69_INT     2
+#define RFM69_RST     9
 #define RFM69_FREQ    434.0 
 #define RFM69_TX_IVAL_100ms  20;
 
@@ -38,18 +39,18 @@
 #define RFM69_CLR_TX   0x03
 #define RFM69_SEND_MSG 0x10
 #define RFM69_RX_AVAIL 0x40
+#define RFM69_TX_FREE  0x50
+
 
 #define I2C_EVENT_BUFF_LEN RFM69_BUF_LEN
 
-struct ring_control_struct {
-    uint8_t head;
-    uint8_t tail;
-    boolean full;
-    uint8_t buf[NBR_BUFFERS][RH_RF69_MAX_MESSAGE_LEN];
-};
 
-ring_control_struct rx_data;
-ring_control_struct tx_data;
+ArrayRingBuf RxData;
+ArrayRingBuf TxData;
+
+uint8_t test1[RFM69_BUF_LEN];
+uint8_t test2[RFM69_BUF_LEN];
+
 
 enum key_states {
   KEY_STATE_IDLE,
@@ -62,10 +63,6 @@ TaHa print_key_handle;
 boolean Debug = true;
 static uint8_t reg_addr;
 static uint8_t i2c_event_buf[I2C_EVENT_BUFF_LEN];
-
-void initialize_buf(ring_control_struct * buf){
-    memset(buf ,0x00, sizeof(buf));
-}
 
 /**
  * @brief  Scan Keypad,run every 10ms by scheduler  
@@ -85,6 +82,22 @@ void setup() {
     Wire.onRequest(RequestEvent);  // register event
     Wire.onReceive(ReceiveEvent);  // register event    
 
+    strcpy(test1,"ABCDEFGHIJKLMNOPQRSTUVXYZ");
+    for (uint8_t i = 0; i < 10; i++) {
+        Serial.print((char)test1[i]);
+    }
+     Serial.println(" !!"); 
+    RxData.Initialize(); 
+    RxData.AddArray(&test1[0], strlen(test1));
+    Serial.println(RxData.Available());
+    RxData.GetArray(test2,RFM69_BUF_LEN);
+    Serial.print(RxData.Available());
+    
+    for (uint8_t i = 0; i < 10; i++) {
+        Serial.print((char)test2[i]);
+    }
+    Serial.println(" <<");
+     
     radio_init(RFM69_CS,RFM69_INT,RFM69_RST, RFM69_FREQ);
     radio_send_msg("RFM69 I2C Slave");
 
@@ -109,6 +122,7 @@ void loop() {
 void ReceiveEvent(int howMany)
 { 
     uint8_t idx;
+    uint8_t buf_len = 0;
  
     Serial.println("receive event");
     idx = 0;
@@ -121,14 +135,30 @@ void ReceiveEvent(int howMany)
           break;
         }
     }
+    buf_len = idx - 1;
     switch (i2c_event_buf[0]) {
     case RFM69_RESET:
+        radio_init(RFM69_CS,RFM69_INT,RFM69_RST, RFM69_FREQ);
+        RxData.Initialize(); 
+        TxData.Initialize();     
         break;
     case RFM69_CLR_RX:
+        Serial.println("RFM69_CLR_RX");
+        RxData.Initialize(); 
         break;
     case RFM69_CLR_TX:
+        Serial.println("RFM69_CLR_TX");
         break;
     case RFM69_SEND_MSG:
+        if (TxData.IsFull()){
+             Serial.println("Tx buffer is full");           
+        }
+        else
+        {
+            TxData.AddArray(i2c_event_buf[1],buf_len-1);
+            Serial.println("Added to Tx buffer");
+            Serial.print("Availablein Tx buffer: "); Serial.println(TxData.Available());
+        }
         break;
     }
 }
@@ -148,27 +178,18 @@ void RequestEvent()
    uint8_t cmd; 
    uint8_t buf[2];
    //Serial.println("request event");
-   if (key_buf[key_rd_indx] != 0x00) {
-       Serial.print (" Key from buffer: "); Serial.print(key_buf[key_rd_indx]);
-       Serial.print(" "); Serial.println(key_func_buf[key_rd_indx]);
-       cmd = Wire.read();  
-       switch (cmd){
-       case RFM69_RX_AVAIL:
-           buf[0] = key_buf[key_rd_indx];
-           buf[1] = i2c_event_buf[0];
-           break;
-       default:
-           buf[0] = 0xAA;
-           buf[1] = 0x55;    
-       }
-       Wire.write(buf,2);
-       key_buf[key_rd_indx] = 0x00;
-       key_func_buf[key_rd_indx] = 0x00;
-       
-       key_rd_indx = ++key_rd_indx & KEY_BUF_MASK;
-    } 
-    else{
-        buf[0] = 0x00; buf[1] = 0x00;
-        Wire.write(buf,2); 
-    } 
+   cmd = Wire.read();  
+   switch (cmd){
+   case RFM69_RX_AVAIL:
+       buf[0] = RxData.Available();
+       Wire.write(buf,1);
+       break;
+   case RFM69_TX_FREE:
+       buf[0] = TxData.Free();
+       Wire.write(buf,1);
+       break;
+    default:
+       buf[0] = 0xAA;
+       buf[1] = 0x55;    
+    }
 }
