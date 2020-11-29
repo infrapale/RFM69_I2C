@@ -123,19 +123,28 @@ void ReceiveEvent(int howMany)
 { 
     uint8_t idx;
     uint8_t buf_len = 0;
+    uint8_t b;
  
-    Serial.println("receive event");
+    
     idx = 0;
     memset(i2c_event_buf,0x00,sizeof(i2c_event_buf));
     while(1 < Wire.available()) // loop through all but the last
     {
         if (idx < I2C_EVENT_BUFF_LEN ) {
-            i2c_event_buf[idx++] = Wire.read();  
+            b = Wire.read();
+            // Serial.print(b);
+            i2c_event_buf[idx++] = b;  
         } else {
           break;
         }
     }
-    buf_len = idx - 1;
+    if (idx > 1) buf_len = idx - 1; 
+    
+    Serial.print("receive event  buf[0]=");
+    Serial.print(i2c_event_buf[0]);
+    Serial.print("  buf_len=");
+    Serial.println(buf_len);
+
     switch (i2c_event_buf[0]) {
     case RFM69_RESET:
         radio_init(RFM69_CS,RFM69_INT,RFM69_RST, RFM69_FREQ);
@@ -157,7 +166,7 @@ void ReceiveEvent(int howMany)
         {
             TxData.AddArray(i2c_event_buf[1],buf_len-1);
             Serial.println("Added to Tx buffer");
-            Serial.print("Availablein Tx buffer: "); Serial.println(TxData.Available());
+            Serial.print("Free in  Tx buffer: "); Serial.println(TxData.Free());
         }
         break;
     }
@@ -177,8 +186,10 @@ void RequestEvent()
    static char c = '0';
    uint8_t cmd; 
    uint8_t buf[2];
-   //Serial.println("request event");
+   
+   Serial.print("RequestEvent  cmd = ");
    cmd = Wire.read();  
+   Serial.println(cmd);
    switch (cmd){
    case RFM69_RX_AVAIL:
        buf[0] = RxData.Available();
