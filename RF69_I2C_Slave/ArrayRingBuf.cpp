@@ -1,7 +1,10 @@
 #include "ArrayRingBuf.h"
+#include "HardwareSerial.h"
     
-ArrayRingBuf::ArrayRingBuf(){
-   Initialize();
+ArrayRingBuf::ArrayRingBuf(HardwareSerial &print){
+    printer = &print; //operate on the adress of print
+    printer->begin(9600);
+    Initialize();
 }
 void ArrayRingBuf::Initialize(void){
     head = 0;
@@ -50,4 +53,15 @@ boolean ArrayRingBuf::IsFull(void){
   {
       return true;  
   }
+}
+
+void ArrayRingBuf::PrintBuffers(void){
+
+    printer->print("head = "); printer->print(head);
+    printer->print(" tail = "); printer->println(tail);
+    for (uint8_t i = 0; i < NBR_BUFFERS; i++){
+        printer->print(i); printer->print(": ");
+        printer->println((char*)buf[i]);
+    }
+  
 }

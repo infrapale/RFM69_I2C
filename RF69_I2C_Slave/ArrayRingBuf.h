@@ -1,5 +1,7 @@
 #include "main.h"
 #include <stddef.h>
+#include <Arduino.h>
+#include "HardwareSerial.h"
 /*
  * https://www.embedded.com/ring-buffer-basics/
  */
@@ -9,7 +11,7 @@
 class ArrayRingBuf
 {
   public:
-    ArrayRingBuf(void);
+    ArrayRingBuf(HardwareSerial &print);
     void Initialize(void);
     void AddArray(uint8_t *b_array, uint16_t b_len);
     uint16_t GetArray(uint8_t *b_array, uint16_t b_len);
@@ -17,9 +19,11 @@ class ArrayRingBuf
     uint8_t Available(void);
     uint8_t Free(void);
     boolean IsFull(void);
+    void PrintBuffers(void);
 private:
     uint8_t head;
     uint8_t tail;
     uint8_t counter;
-    uint8_t buf[NBR_BUFFERS][RING_BUF_LEN];   
+    uint8_t buf[NBR_BUFFERS][RING_BUF_LEN]; 
+    HardwareSerial* printer;  
 };

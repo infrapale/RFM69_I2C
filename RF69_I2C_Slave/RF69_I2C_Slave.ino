@@ -41,15 +41,18 @@
 #define RFM69_RX_AVAIL 0x40
 #define RFM69_TX_FREE  0x50
 
+#define LED   13
 
 #define I2C_EVENT_BUFF_LEN RFM69_BUF_LEN
 
 
-ArrayRingBuf RxData;
-ArrayRingBuf TxData;
+ArrayRingBuf RxData(Serial);
+ArrayRingBuf TxData(Serial);
 
 uint8_t test1[RFM69_BUF_LEN];
 uint8_t test2[RFM69_BUF_LEN];
+
+uint8_t tx_buf[RFM69_BUF_LEN];
 
 
 enum key_states {
@@ -57,8 +60,7 @@ enum key_states {
   KEY_STATE_PRESSED,
 };
 
-TaHa scan_keypad_handle;
-TaHa print_key_handle;
+TaHa radio_send_handle;
 
 boolean Debug = true;
 static uint8_t reg_addr;
@@ -100,16 +102,13 @@ void setup() {
      
     radio_init(RFM69_CS,RFM69_INT,RFM69_RST, RFM69_FREQ);
     radio_send_msg("RFM69 I2C Slave");
-
- 
+    
+    radio_send_handle.set_interval(2000,RUN_RECURRING, radio_tx_handler);
 }
 
 void loop() {
-  // put your main code here, to run repeatedly:
-  scan_keypad_handle.run();
-  //print_key_handle.run();
-  // RawScan();
-  //digitalWrite(ROW_PIN[0], HIGH);
+    radio_send_handle.run();
+  
 }
 
 /**
@@ -157,6 +156,7 @@ void ReceiveEvent(int howMany)
         break;
     case RFM69_CLR_TX:
         Serial.println("RFM69_CLR_TX");
+        TxData.Initialize();
         break;
     case RFM69_SEND_MSG:
         if (TxData.IsFull()){
@@ -165,6 +165,7 @@ void ReceiveEvent(int howMany)
         else
         {
             TxData.AddArray(i2c_event_buf[1],buf_len-1);
+            TxData.PrintBuffers();
             Serial.println("Added to Tx buffer");
             Serial.print("Free in  Tx buffer: "); Serial.println(TxData.Free());
         }
@@ -203,4 +204,20 @@ void RequestEvent()
        buf[0] = 0xAA;
        buf[1] = 0x55;    
     }
+}
+
+
+void radio_tx_handler(void){
+    if (TxData.IsFull()){
+        Serial.println("Tx buffer is full");
+    }
+    else {
+        digitalWrite(LED, HIGH); 
+        Serial.println("Sending data");
+        TxData.PrintBuffers();
+        TxData.GetArray(tx_buf,RFM69_BUF_LEN);
+        radio_send_msg(tx_buf);
+        digitalWrite(LED, LOW);
+        radio_send_handle.delay_task(2000);
+    } 
 }
