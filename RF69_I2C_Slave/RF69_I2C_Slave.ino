@@ -41,6 +41,7 @@
 #define RFM69_RX_AVAIL 0x40
 #define RFM69_TX_FREE  0x50
 
+
 #define LED   13
 
 #define I2C_EVENT_BUFF_LEN RFM69_BUF_LEN
@@ -53,6 +54,10 @@ uint8_t test1[RFM69_BUF_LEN];
 uint8_t test2[RFM69_BUF_LEN];
 
 uint8_t tx_buf[RFM69_BUF_LEN];
+
+uint8_t tx_sema;
+uint8_t rx_sema;
+
 
 
 enum key_states {
@@ -99,7 +104,7 @@ void setup() {
         Serial.print((char)test2[i]);
     }
     Serial.println(" <<");
-     
+    
     radio_init(RFM69_CS,RFM69_INT,RFM69_RST, RFM69_FREQ);
     radio_send_msg("RFM69 I2C Slave");
     
@@ -137,7 +142,7 @@ void ReceiveEvent(int howMany)
           break;
         }
     }
-    if (idx > 1) buf_len = idx - 1; 
+    if (idx > 1) buf_len = idx; 
     
     Serial.print("receive event  buf[0]=");
     Serial.print(i2c_event_buf[0]);
@@ -159,16 +164,27 @@ void ReceiveEvent(int howMany)
         TxData.Initialize();
         break;
     case RFM69_SEND_MSG:
-        if (TxData.IsFull()){
-             Serial.println("Tx buffer is full");           
+        while (!TxData.SemaAvail()){
+            Serial.println("Tx sema wait");
         }
-        else
-        {
-            TxData.AddArray(i2c_event_buf[1],buf_len-1);
-            TxData.PrintBuffers();
-            Serial.println("Added to Tx buffer");
-            Serial.print("Free in  Tx buffer: "); Serial.println(TxData.Free());
+        if (TxData.ReserveSema()){
+            if (TxData.IsFull()){
+                 Serial.println("Tx buffer is full");           
+            }
+            else
+            {
+                TxData.AddArray(&i2c_event_buf[1],buf_len);
+                TxData.PrintBuffers();
+                for (uint8_t i=0;i<buf_len;i++) {
+                    Serial.print(char(i2c_event_buf[i]));
+                }
+                Serial.print(", Added to Tx buffer, buf_len="); Serial.print(buf_len);
+                Serial.print(", Free in  Tx buffer: "); Serial.println(TxData.Free());
+            }
+        } else {
+            Serial.println("Failed when reserving TX buffer semaphore");
         }
+        TxData.ReleaseSema();
         break;
     }
 }
@@ -208,16 +224,20 @@ void RequestEvent()
 
 
 void radio_tx_handler(void){
-    if (TxData.IsFull()){
-        Serial.println("Tx buffer is full");
-    }
-    else {
-        digitalWrite(LED, HIGH); 
-        Serial.println("Sending data");
-        TxData.PrintBuffers();
-        TxData.GetArray(tx_buf,RFM69_BUF_LEN);
-        radio_send_msg(tx_buf);
-        digitalWrite(LED, LOW);
-        radio_send_handle.delay_task(2000);
+  
+    if (TxData.Available()){
+        if (TxData.SemaAvail()){
+            if (TxData.ReserveSema()){
+                digitalWrite(LED, HIGH); 
+                Serial.println("Sending data");
+                TxData.PrintBuffers();
+                TxData.GetArray(tx_buf,RFM69_BUF_LEN);
+                TxData.PrintBuffers();
+                TxData.ReleaseSema();
+                radio_send_msg(tx_buf);
+                digitalWrite(LED, LOW);
+                radio_send_handle.delay_task(2000);
+            }
+        }    
     } 
 }

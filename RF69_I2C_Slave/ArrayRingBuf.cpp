@@ -10,6 +10,7 @@ void ArrayRingBuf::Initialize(void){
     head = 0;
     tail = 0;
     counter = 0;
+    sema = SEMA_FREE;
     for (uint8_t i = 0; i < NBR_BUFFERS; i++) {
         buf[i][0] = 0;
     }
@@ -17,10 +18,13 @@ void ArrayRingBuf::Initialize(void){
 void ArrayRingBuf::AddArray(uint8_t *b_array, uint16_t b_len)
 {
     if ( ! IsFull() ){
+        b_len = (b_len < RING_BUF_LEN) ? b_len :  RING_BUF_LEN;
         memcpy(buf[head],b_array, b_len);
+        for (uint8_t i=0;i<b_len;i++) printer->print(b_array[i]);
+        printer->println("");
         if(++head >= NBR_BUFFERS) head = 0;
         counter++;
-    }
+    } else printer->println("Buffer is full");
 }
 
 
@@ -45,20 +49,30 @@ uint8_t ArrayRingBuf::Free(){
 }
 
 boolean ArrayRingBuf::IsFull(void){
-  if (counter < NBR_BUFFERS) 
-  {
-      return false;
-  } 
-  else
-  {
-      return true;  
-  }
+  return (counter < NBR_BUFFERS) ? false : true; 
 }
+
+boolean ArrayRingBuf::ReserveSema(void){
+    if (sema == SEMA_FREE) {
+        sema = SEMA_RESERVED;
+        return true; 
+    } else {
+        return false;
+    }
+}
+void ArrayRingBuf::ReleaseSema(void){
+    sema = SEMA_FREE;
+}
+boolean ArrayRingBuf::SemaAvail(void){
+    return (sema == SEMA_FREE) ? true : false;
+}
+
 
 void ArrayRingBuf::PrintBuffers(void){
 
     printer->print("head = "); printer->print(head);
-    printer->print(" tail = "); printer->println(tail);
+    printer->print(" tail = "); printer->print(tail);
+    printer->print(" counter = "); printer->println(counter);
     for (uint8_t i = 0; i < NBR_BUFFERS; i++){
         printer->print(i); printer->print(": ");
         printer->println((char*)buf[i]);

@@ -19,11 +19,15 @@ class ArrayRingBuf
     uint8_t Available(void);
     uint8_t Free(void);
     boolean IsFull(void);
+    boolean ReserveSema(void);
+    void ReleaseSema(void);
+    boolean SemaAvail(void);
     void PrintBuffers(void);
 private:
     uint8_t head;
     uint8_t tail;
     uint8_t counter;
+    uint8_t sema;
     uint8_t buf[NBR_BUFFERS][RING_BUF_LEN]; 
     HardwareSerial* printer;  
 };
