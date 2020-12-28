@@ -38,20 +38,20 @@
 #define RFM69_CLR_RX   0x02
 #define RFM69_CLR_TX   0x03
 #define RFM69_SEND_MSG 0x10
+#define RFM69_TX_DATA  0x11
 #define RFM69_RX_AVAIL 0x40
 #define RFM69_TX_FREE  0x50
 
 
 #define LED   13
 
-#define I2C_EVENT_BUFF_LEN RFM69_BUF_LEN
-
+#define I2C_EVENT_BUFF_LEN 32
 
 ArrayRingBuf RxData(Serial);
 ArrayRingBuf TxData(Serial);
 
-uint8_t test1[RFM69_BUF_LEN];
-uint8_t test2[RFM69_BUF_LEN];
+uint8_t tx_i2c_buf[RFM69_BUF_LEN];
+uint8_t rx_i2c_buf[RFM69_BUF_LEN];
 
 uint8_t tx_buf[RFM69_BUF_LEN];
 
@@ -69,7 +69,7 @@ TaHa radio_send_handle;
 
 boolean Debug = true;
 static uint8_t reg_addr;
-static uint8_t i2c_event_buf[I2C_EVENT_BUFF_LEN];
+static uint8_t i2c_event_buf[I2C_EVENT_BUFF_LEN+2];
 
 /**
  * @brief  Scan Keypad,run every 10ms by scheduler  
@@ -88,23 +88,8 @@ void setup() {
     Wire.begin(RFM_I2C_ADDR);      // join i2c bus with address 
     Wire.onRequest(RequestEvent);  // register event
     Wire.onReceive(ReceiveEvent);  // register event    
-
-    strcpy(test1,"ABCDEFGHIJKLMNOPQRSTUVXYZ");
-    for (uint8_t i = 0; i < 10; i++) {
-        Serial.print((char)test1[i]);
-    }
-     Serial.println(" !!"); 
-    RxData.Initialize(); 
-    RxData.AddArray(&test1[0], strlen(test1));
-    Serial.println(RxData.Available());
-    RxData.GetArray(test2,RFM69_BUF_LEN);
-    Serial.print(RxData.Available());
-    
-    for (uint8_t i = 0; i < 10; i++) {
-        Serial.print((char)test2[i]);
-    }
-    Serial.println(" <<");
-    
+   
+   
     radio_init(RFM69_CS,RFM69_INT,RFM69_RST, RFM69_FREQ);
     radio_send_msg("RFM69 I2C Slave");
     
@@ -163,7 +148,16 @@ void ReceiveEvent(int howMany)
         Serial.println("RFM69_CLR_TX");
         TxData.Initialize();
         break;
+    case RFM69_TX_DATA:
+        Serial.println(" RFM69_TX_DATA");
+        if (i2c_event_buf[1] + buf_len < RFM69_BUF_LEN){
+            memcpy( &tx_i2c_buf[i2c_event_buf[1]] , &i2c_event_buf[2], buf_len-2);
+        }
+        else {
+            Serial.println("too long");
+        }
     case RFM69_SEND_MSG:
+    
         while (!TxData.SemaAvail()){
             Serial.println("Tx sema wait");
         }
@@ -173,10 +167,11 @@ void ReceiveEvent(int howMany)
             }
             else
             {
-                TxData.AddArray(&i2c_event_buf[1],buf_len);
+                TxData.AddArray(tx_i2c_buf,RFM69_BUF_LEN);
+                
                 TxData.PrintBuffers();
-                for (uint8_t i=0;i<buf_len;i++) {
-                    Serial.print(char(i2c_event_buf[i]));
+                for (uint8_t i=0;i<RFM69_BUF_LEN;i++) {
+                    Serial.print(char(tx_i2c_buf[i]));
                 }
                 Serial.print(", Added to Tx buffer, buf_len="); Serial.print(buf_len);
                 Serial.print(", Free in  Tx buffer: "); Serial.println(TxData.Free());
@@ -185,6 +180,7 @@ void ReceiveEvent(int howMany)
             Serial.println("Failed when reserving TX buffer semaphore");
         }
         TxData.ReleaseSema();
+        memset(tx_i2c_buf,0x00,RFM69_BUF_LEN);
         break;
     }
 }
