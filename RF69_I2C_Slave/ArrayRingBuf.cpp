@@ -20,8 +20,8 @@ void ArrayRingBuf::AddArray(uint8_t *b_array, uint16_t b_len)
     if ( ! IsFull() ){
         b_len = (b_len < RING_BUF_LEN) ? b_len :  RING_BUF_LEN;
         memcpy(buf[head],b_array, b_len);
-        for (uint8_t i=0;i<b_len;i++) printer->print(b_array[i]);
-        printer->println("");
+        //for (uint8_t i=0;i<b_len;i++) printer->print(b_array[i]);
+        //printer->println("");
         if(++head >= NBR_BUFFERS) head = 0;
         counter++;
     } else printer->println("Buffer is full");
