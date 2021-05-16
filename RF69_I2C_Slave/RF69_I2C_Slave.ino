@@ -41,8 +41,9 @@
 #define RFM69_TX_DATA     0x11
 #define RFM69_RX_AVAIL    0x40
 #define RFM69_RX_LOAD_MSG 0x41
-#define RFM69_RX_RD_MSG   0x42
-#define RFM69_RX_RD_LEN   0x43
+#define RFM69_RX_RD_MSG1  0x42
+#define RFM69_RX_RD_MSG2  0x43
+#define RFM69_RX_RD_LEN   0x44
 #define RFM69_TX_FREE     0x50
 
 
@@ -155,11 +156,12 @@ void ReceiveEvent(int howMany)
     if (buf_len > 1) i2c_mgmt.offset          = i2c_event_buf[1];
     if (buf_len > 2) i2c_mgmt.rd_len          = i2c_event_buf[2];
     
-    
-    Serial.print("request_command="); Serial.print(i2c_mgmt.request_command);
+    /*
+    Serial.print("request_command="); Serial.print(i2c_mgmt.request_command, HEX);
     Serial.print(", offset =");  Serial.print(i2c_mgmt.offset);
     Serial.print(", rd_len =");  Serial.print(i2c_mgmt.rd_len);
     Serial.print(",  buf_len="); Serial.println(buf_len);
+    */
     
     switch (i2c_event_buf[0]) {
     case RFM69_RESET:
@@ -220,14 +222,6 @@ void ReceiveEvent(int howMany)
         memset(tx_i2c_buf,0x00,RFM69_BUF_LEN);
         break;
 
-    case RFM69_RX_LOAD_MSG:
-        if (RxData.Available() > 0){
-            i2c_mgmt.rx_bytes =  RxData.GetArray(i2c_load_buf, RFM69_BUF_LEN);
-        }
-        else {
-            i2c_mgmt.rd_len = 0;
-        }
-        break;
     }
 }
 
@@ -256,22 +250,27 @@ void RequestEvent()
        buf[0] = TxData.Free();
        Wire.write(buf,1);
        break;
-    case RFM69_RX_RD_MSG:
-        if ((i2c_mgmt.offset + i2c_mgmt.rd_len) > RFM69_BUF_LEN-1){
-            if (i2c_mgmt.offset > RFM69_BUF_LEN){
-                n_bytes = 0;
-            } else {
-                n_bytes =  RFM69_BUF_LEN - i2c_mgmt.offset;         
-            }
-        } else {
-            n_bytes = i2c_mgmt.rd_len;
+    case RFM69_RX_LOAD_MSG:
+        memset(i2c_load_buf,0x00,RFM69_BUF_LEN);
+        if (RxData.Available() > 0){
+            i2c_mgmt.rx_bytes =  RxData.GetArray(i2c_load_buf, RFM69_BUF_LEN);  
         }
-        Wire.write(&i2c_load_buf[i2c_mgmt.offset],i2c_mgmt.rd_len);
-        //for (indx = i2c_mgmt.offset; indx < i2c_mgmt.offset + i2c_mgmt.rd_len; indx++){
-        //     
-        //}
-        
+        else {
+            i2c_mgmt.rx_bytes = 0;
+        }
+        buf[0] = i2c_mgmt.rx_bytes;
+        Wire.write(buf,1);
+        break;
+   case RFM69_RX_RD_MSG1:
+        i2c_mgmt.offset = 0;
+        i2c_mgmt.rd_len = 32;
+        Wire.write(&i2c_load_buf[i2c_mgmt.offset],i2c_mgmt.rd_len);        
         break;  
+   case RFM69_RX_RD_MSG2:
+        i2c_mgmt.offset = 32;
+        i2c_mgmt.rd_len = RFM69_BUF_LEN - i2c_mgmt.offset ;
+        Wire.write(&i2c_load_buf[i2c_mgmt.offset],i2c_mgmt.rd_len);        
+        break;         
     case  RFM69_RX_RD_LEN:
         buf[0] = i2c_mgmt.rx_bytes;
         Wire.write(buf,1);
@@ -318,5 +317,6 @@ void radio_rx_handler(void){
         } else {
             Serial.println("Rx buffers are full, message not added");
         }
+        RxData.PrintBuffers();
     } 
 }
