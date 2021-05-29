@@ -308,6 +308,7 @@ void radio_rx_handler(void){
         // Serial.print("! available!");
         // Should be a message for us now   
         char json_msg[RH_RF69_MAX_MESSAGE_LEN];
+        memset(json_msg,0x00,RH_RF69_MAX_MESSAGE_LEN);
         uint8_t len;
         len = radio_read_msg(json_msg, RFM69_BUF_LEN);
         for (i=0;i<len;i++) Serial.print(json_msg[i]);
