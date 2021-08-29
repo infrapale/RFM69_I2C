@@ -5,8 +5,8 @@
 /*
  * https://www.embedded.com/ring-buffer-basics/
  */
-#define NBR_BUFFERS  4
-#define RING_BUF_LEN RFM69_BUF_LEN
+#define NBR_BUFFERS  2
+#define RING_BUF_LEN  I2C_EVENT_BUFF_LEN*2   // RFM69_BUF_LEN = 60
 
 class ArrayRingBuf
 {

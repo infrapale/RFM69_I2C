@@ -21,22 +21,25 @@
 #include <rfm69_support.h>
 #include "ArrayRingBuf.h"
 #include <TaHa.h>
+#include <WatchDog.h>
+
 
 #define KEY_BUF_LEN     8
 #define RFM_I2C_ADDR    0x20
-#define NBR_BUFFERS     4
-#define BUF_LEN         
 
 //#define FREQUENCY     RF69_434MHZ
 #define RFM69_CS      10
 #define RFM69_INT     2
 #define RFM69_RST     9
 #define RFM69_FREQ    434.0 
-#define RFM69_TX_IVAL_100ms  20;
+#define RFM69_TX_IVAL_100ms  20
+
+#define RFM69_ID          0x42
 
 #define RFM69_RESET       0x01
 #define RFM69_CLR_RX      0x02
 #define RFM69_CLR_TX      0x03
+#define RFM69_GET_ID      0x05
 #define RFM69_SEND_MSG    0x10
 #define RFM69_TX_DATA     0x11
 #define RFM69_RX_AVAIL    0x40
@@ -47,9 +50,9 @@
 #define RFM69_TX_FREE     0x50
 
 
-#define LED   13
 
-#define I2C_EVENT_BUFF_LEN 32
+const byte LED_PIN    = 13;
+
 
 ArrayRingBuf RxData(Serial);
 ArrayRingBuf TxData(Serial);
@@ -66,6 +69,7 @@ struct i2c_mgmt_struct{
     uint8_t request_command;
     uint8_t rd_len;
     uint8_t rx_bytes;
+    
     uint8_t offset;
     
 };
@@ -93,11 +97,15 @@ static uint8_t i2c_load_buf[I2C_EVENT_BUFF_LEN+2];
  */
 
 void setup() {
+    pinMode(LED_PIN, OUTPUT);
+    digitalWrite(LED_PIN, LOW);
+    WatchDog::init(blinkISR, OVF_8000MS);
+    //WatchDog::setPeriod(OVF_8000MS);
     // wdt_disable();  /* Disable the watchdog and wait for more than 2 seconds */
     delay(2000);
     while (!Serial); // wait until serial console is open, remove if not tethered to computer
     Serial.begin(9600);
-    Serial.println("RF69 I2C_Slave Tom Höglund 2020");
+    Serial.println("RF69 I2C_Slave Tom Höglund 2021");
 
     i2c_mgmt.request_command = 0x00;
     i2c_mgmt.rd_len = 0x00;
@@ -119,6 +127,12 @@ void loop() {
     radio_send_handle.run();
     radio_receive_handle.run();
   
+}
+
+void (*reset_func)(void) = 0;
+inline void asm_reset(void)
+{
+    asm volatile (" jmp 0");
 }
 
 /**
@@ -167,7 +181,8 @@ void ReceiveEvent(int howMany)
     case RFM69_RESET:
         radio_init(RFM69_CS,RFM69_INT,RFM69_RST, RFM69_FREQ);
         RxData.Initialize(); 
-        TxData.Initialize();     
+        TxData.Initialize();  
+        Serial.println("RFM69 Reset");   
         break;
     case RFM69_CLR_RX:
         Serial.println("RFM69_CLR_RX");
@@ -250,6 +265,10 @@ void RequestEvent()
        buf[0] = TxData.Free();
        Wire.write(buf,1);
        break;
+   case RFM69_GET_ID:
+       buf[0] = RFM69_ID;
+       Wire.write(buf,1);
+       break;
     case RFM69_RX_LOAD_MSG:
         memset(i2c_load_buf,0x00,RFM69_BUF_LEN);
         if (RxData.Available() > 0){
@@ -263,12 +282,12 @@ void RequestEvent()
         break;
    case RFM69_RX_RD_MSG1:
         i2c_mgmt.offset = 0;
-        i2c_mgmt.rd_len = 32;
+        i2c_mgmt.rd_len = I2C_EVENT_BUFF_LEN;
         Wire.write(&i2c_load_buf[i2c_mgmt.offset],i2c_mgmt.rd_len);        
         break;  
    case RFM69_RX_RD_MSG2:
-        i2c_mgmt.offset = 32;
-        i2c_mgmt.rd_len = RFM69_BUF_LEN - i2c_mgmt.offset ;
+        i2c_mgmt.offset = I2C_EVENT_BUFF_LEN;
+        i2c_mgmt.rd_len = I2C_EVENT_BUFF_LEN;
         Wire.write(&i2c_load_buf[i2c_mgmt.offset],i2c_mgmt.rd_len);        
         break;         
     case  RFM69_RX_RD_LEN:
@@ -289,13 +308,13 @@ void radio_tx_handler(void){
     if (TxData.Available()){
         if (TxData.SemaAvail()){
             if (TxData.ReserveSema()){
-                digitalWrite(LED, HIGH); 
+                //digitalWrite(LED, HIGH); 
                 Serial.println("Sending data");
                 //TxData.PrintBuffers();
                 TxData.GetArray(tx_buf,RFM69_BUF_LEN);
                 TxData.ReleaseSema();
                 radio_send_msg(tx_buf);
-                digitalWrite(LED, LOW);
+                //digitalWrite(LED, LOW);
                 radio_send_handle.delay_task(2000);
             }
         }    
@@ -320,4 +339,12 @@ void radio_rx_handler(void){
         }
         RxData.PrintBuffers();
     } 
+}
+
+void blinkISR() {                                         // watchdog timer interrupt service routine    
+    digitalWrite(LED_PIN, HIGH);
+    Serial.println("Watchdog interrupt");
+    delay(1000);
+    asm_reset();
+    // reset_func();
 }
