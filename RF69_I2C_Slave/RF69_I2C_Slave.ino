@@ -15,13 +15,13 @@
  ******************************************************************************
  */
 
-
+#include <Arduino.h>
 #include <Wire.h>
 #include "main.h"
 #include <rfm69_support.h>
 #include "ArrayRingBuf.h"
 #include <TaHa.h>
-#include <WatchDog.h>
+#include "avr_watchdog.h"
 
 
 #define KEY_BUF_LEN     8
@@ -53,7 +53,6 @@
 
 const byte LED_PIN    = 13;
 
-
 ArrayRingBuf RxData(Serial);
 ArrayRingBuf TxData(Serial);
 
@@ -84,6 +83,7 @@ enum key_states {
 
 TaHa radio_send_handle;
 TaHa radio_receive_handle;
+AVR_Watchdog watchdog(8);
 
 boolean Debug = true;
 static uint8_t reg_addr;
@@ -96,13 +96,14 @@ static uint8_t i2c_load_buf[I2C_EVENT_BUFF_LEN+2];
  * @retval -
  */
 
-void setup() {
+void setup() 
+{
+    cli();
+    delay(4000);
+    watchdog.set_timeout(8);
+    sei();
     pinMode(LED_PIN, OUTPUT);
     digitalWrite(LED_PIN, LOW);
-    WatchDog::init(blinkISR, OVF_8000MS);
-    //WatchDog::setPeriod(OVF_8000MS);
-    // wdt_disable();  /* Disable the watchdog and wait for more than 2 seconds */
-    delay(2000);
     while (!Serial); // wait until serial console is open, remove if not tethered to computer
     Serial.begin(9600);
     Serial.println("RF69 I2C_Slave Tom Höglund 2021");
@@ -150,7 +151,7 @@ void ReceiveEvent(int howMany)
     uint8_t buf_pos;
     uint8_t i;
  
-    
+    watchdog.clear();
     idx = 0;
     memset(i2c_event_buf,0x00,sizeof(i2c_event_buf));
     //Serial.print("howMany= "); Serial.println(howMany);
@@ -254,7 +255,8 @@ void RequestEvent()
    uint8_t buf[2];
    uint8_t n_bytes;
    uint8_t indx;
-   
+
+   watchdog.clear();
    Serial.print("RequestEvent  cmd = ");  Serial.println(i2c_mgmt.request_command,HEX);
    switch (i2c_mgmt.request_command){
    case RFM69_RX_AVAIL:
